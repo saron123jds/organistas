@@ -10,8 +10,9 @@
   <header class="top">
     <div>
       <h1>Sistema de Rodízio de Organistas</h1>
-      <p class="muted">Localhost • Porta 9000 • Node + SQLite</p>
+      <p class="muted">Gestão inteligente de escalas • Node + SQLite</p>
     </div>
+    <div class="headerBadge">✨ Versão aprimorada</div>
   </header>
 
   <nav class="tabs">
@@ -22,6 +23,21 @@
   </nav>
 
   <main class="container">
+    <section class="heroStats">
+      <article class="statCard">
+        <p>Total de igrejas</p>
+        <strong id="stat_igrejas">0</strong>
+      </article>
+      <article class="statCard">
+        <p>Total de irmãs</p>
+        <strong id="stat_irmas">0</strong>
+      </article>
+      <article class="statCard">
+        <p>Rodízios salvos</p>
+        <strong id="stat_rodizios">0</strong>
+      </article>
+    </section>
+
     <!-- IGREJAS -->
     <section class="panel active" id="tab-igrejas">
       <div class="grid2">
@@ -74,8 +90,13 @@
             <div class="checks" id="irma_dias"></div>
 
             <label class="inline">
+              <input type="checkbox" id="irma_culto_jovens" />
+              Toca no culto de jovens?
+            </label>
+
+            <label class="inline hidden" id="irma_primeiro_domingo_wrap">
               <input type="checkbox" id="irma_primeiro_domingo" />
-              Pode tocar no 1º domingo do mês?
+              Se sim, pode tocar no 1º domingo do mês?
             </label>
 
             <label>Dias bloqueados (YYYY-MM-DD) — separa por vírgula</label>
