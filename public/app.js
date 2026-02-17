@@ -61,6 +61,7 @@ async function api(url, opts){
 async function loadIgrejas(){
   igrejas = await api("/api/igrejas");
   renderIgrejas();
+  renderIrmaChurchMap();
   renderPDFIgrejasChecks();
   updateDashboardStats();
 }
@@ -86,8 +87,71 @@ function updateDashboardStats(){
 function togglePrimeiroDomingoField(){
   const tocaJovens = qs("#irma_culto_jovens").checked;
   const wrap = qs("#irma_primeiro_domingo_wrap");
+  const wrapJovensIgrejas = qs("#irma_culto_jovens_igrejas_wrap");
   wrap.classList.toggle("hidden", !tocaJovens);
+  wrapJovensIgrejas.classList.toggle("hidden", !tocaJovens);
   if (!tocaJovens) qs("#irma_primeiro_domingo").checked = false;
+
+  const tocaPrimeiroDomingo = tocaJovens && qs("#irma_primeiro_domingo").checked;
+  const wrapPrimeiroIgrejas = qs("#irma_primeiro_domingo_igrejas_wrap");
+  wrapPrimeiroIgrejas.classList.toggle("hidden", !tocaPrimeiroDomingo);
+}
+
+function renderIrmaChurchMap(){
+  const box = qs("#irma_igrejas_mapa");
+  box.innerHTML = "";
+
+  if (igrejas.length === 0) {
+    box.innerHTML = `<div class="muted small">Cadastre igrejas primeiro.</div>`;
+    return;
+  }
+
+  igrejas.forEach(g => {
+    const card = document.createElement("div");
+    card.className = "churchMapItem";
+
+    const checksDias = DIAS.map(d => `
+      <label>
+        <input type="checkbox" value="${d}" data-irma-igreja-dia="${g.id}">
+        ${d}
+      </label>
+    `).join("");
+
+    card.innerHTML = `
+      <div class="churchMapTitle"><b>${esc(g.nome)}</b></div>
+      <div class="checks">${checksDias}</div>
+    `;
+
+    box.appendChild(card);
+  });
+
+  renderIrmaSpecialChurchesChecks();
+}
+
+function renderIrmaSpecialChurchesChecks(){
+  const jovensBox = qs("#irma_culto_jovens_igrejas");
+  const primeiroDomingoBox = qs("#irma_primeiro_domingo_igrejas");
+  jovensBox.innerHTML = "";
+  primeiroDomingoBox.innerHTML = "";
+
+  igrejas.forEach(g => {
+    const j = document.createElement("label");
+    j.innerHTML = `<input type="checkbox" value="${g.id}" data-culto-jovens-igreja> ${esc(g.nome)}`;
+    jovensBox.appendChild(j);
+
+    const p = document.createElement("label");
+    p.innerHTML = `<input type="checkbox" value="${g.id}" data-primeiro-domingo-igreja> ${esc(g.nome)}`;
+    primeiroDomingoBox.appendChild(p);
+  });
+}
+
+function getIrmaIgrejasPreferencias(){
+  const result = [];
+  igrejas.forEach(g => {
+    const dias = qsa(`input[data-irma-igreja-dia="${g.id}"]`).filter(i => i.checked).map(i => i.value);
+    if (dias.length > 0) result.push({ igreja_id: g.id, dias });
+  });
+  return result;
 }
 
 /** Renderers **/
@@ -136,13 +200,22 @@ function renderIrmas(){
     const div = document.createElement("div");
     div.className = "item";
     const bloqueios = (i.dias_bloqueados || []).join(", ");
+    const mapaIgrejas = (i.igrejas_preferencias || [])
+      .map(p => {
+        const ig = igrejas.find(g => Number(g.id) === Number(p.igreja_id));
+        const nomeIgreja = ig ? ig.nome : `Igreja #${p.igreja_id}`;
+        return `${nomeIgreja} (${(p.dias || []).join(", ")})`;
+      })
+      .join(" • ");
     div.innerHTML = `
       <div class="title">
         <div>
           <b>${esc(i.nome)}</b>
           <div class="muted small">Origem: ${esc(i.igreja_origem || "-")} • Dias: ${i.dias_disponiveis.join(", ")} • 1º Domingo: ${i.toca_primeiro_domingo ? "Sim" : "Não"}</div>
+          <div class="muted small">Igrejas/Dias: ${esc(mapaIgrejas || "-")}</div>
           <div class="muted small">Bloqueios: ${esc(bloqueios || "-")}</div>
-          <div class="muted small">Culto de jovens: ${i.toca_culto_jovens ? "Sim" : "Não"}</div>
+          <div class="muted small">Culto de jovens: ${i.toca_culto_jovens ? "Sim" : "Não"} ${i.culto_jovens_igreja_ids?.length ? `(${i.culto_jovens_igreja_ids.map(id => igrejas.find(g => Number(g.id) === Number(id))?.nome || `#${id}`).join(", ")})` : ""}</div>
+          <div class="muted small">1º domingo (igrejas): ${i.primeiro_domingo_igreja_ids?.length ? i.primeiro_domingo_igreja_ids.map(id => igrejas.find(g => Number(g.id) === Number(id))?.nome || `#${id}`).join(", ") : "-"}</div>
         </div>
         <div class="row">
           <button class="btn" data-edit="${i.id}">Bloqueios</button>
@@ -375,6 +448,9 @@ async function onSalvarIrma(){
   const dias = getCheckedDays("irma");
   const toca_culto_jovens = qs("#irma_culto_jovens").checked;
   const toca_primeiro_domingo = toca_culto_jovens && qs("#irma_primeiro_domingo").checked;
+  const igrejas_preferencias = getIrmaIgrejasPreferencias();
+  const culto_jovens_igreja_ids = qsa("input[data-culto-jovens-igreja]").filter(i => i.checked).map(i => Number(i.value));
+  const primeiro_domingo_igreja_ids = qsa("input[data-primeiro-domingo-igreja]").filter(i => i.checked).map(i => Number(i.value));
 
   const bloqueiosTxt = qs("#irma_bloqueios").value.trim();
   const dias_bloqueados = bloqueiosTxt
@@ -383,18 +459,32 @@ async function onSalvarIrma(){
 
   if (!nome) return toast("Informe o nome da irmã.");
   if (dias.length === 0) return toast("Selecione ao menos 1 dia disponível.");
+  if (igrejas_preferencias.length === 0) return toast("Selecione ao menos uma igreja com dias para a irmã.");
 
   await api("/api/irmas", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ nome, igreja_origem, dias_disponiveis:dias, toca_culto_jovens, toca_primeiro_domingo, dias_bloqueados })
+    body: JSON.stringify({
+      nome,
+      igreja_origem,
+      dias_disponiveis:dias,
+      toca_culto_jovens,
+      toca_primeiro_domingo,
+      dias_bloqueados,
+      igrejas_preferencias,
+      culto_jovens_igreja_ids,
+      primeiro_domingo_igreja_ids
+    })
   });
 
   qs("#irma_nome").value = "";
   qs("#irma_igreja_origem").value = "";
   qsa("#irma_dias input").forEach(i => i.checked = false);
+  qsa("#irma_igrejas_mapa input[type=checkbox]").forEach(i => i.checked = false);
   qs("#irma_culto_jovens").checked = false;
   qs("#irma_primeiro_domingo").checked = false;
+  qsa("input[data-culto-jovens-igreja]").forEach(i => i.checked = false);
+  qsa("input[data-primeiro-domingo-igreja]").forEach(i => i.checked = false);
   togglePrimeiroDomingoField();
   qs("#irma_bloqueios").value = "";
 
@@ -477,6 +567,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   qs("#btnSalvarIgreja").addEventListener("click", onSalvarIgreja);
   qs("#btnSalvarIrma").addEventListener("click", onSalvarIrma);
   qs("#irma_culto_jovens").addEventListener("change", togglePrimeiroDomingoField);
+  qs("#irma_primeiro_domingo").addEventListener("change", togglePrimeiroDomingoField);
   togglePrimeiroDomingoField();
   qs("#btnGerar").addEventListener("click", onGerar);
   qs("#btnSalvarRodizio").addEventListener("click", onSalvarRodizio);

@@ -118,6 +118,23 @@ h3{ margin:14px 0 8px; font-size:14px; }
   color:var(--text);
 }
 
+.churchMap{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.churchMapItem{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:10px;
+  background:rgba(255,255,255,.02);
+}
+
+.churchMapTitle{
+  margin-bottom:4px;
+}
+
 .btn{
   border:1px solid var(--line);
   background: rgba(255,255,255,.06);

@@ -22,8 +22,11 @@ function init() {
       nome TEXT NOT NULL UNIQUE,
       igreja_origem TEXT,
       dias_disponiveis TEXT NOT NULL, -- JSON string array
+      igrejas_preferencias TEXT NOT NULL DEFAULT '[]', -- JSON [{igreja_id, dias:[...]}]
       toca_culto_jovens INTEGER NOT NULL DEFAULT 0,
+      culto_jovens_igreja_ids TEXT NOT NULL DEFAULT '[]', -- JSON [igreja_id]
       toca_primeiro_domingo INTEGER NOT NULL DEFAULT 0,
+      primeiro_domingo_igreja_ids TEXT NOT NULL DEFAULT '[]', -- JSON [igreja_id]
       dias_bloqueados TEXT NOT NULL DEFAULT '[]' -- JSON array de datas "YYYY-MM-DD"
     );
 
@@ -55,6 +58,21 @@ function init() {
   const hasCultoJovens = irmasColumns.some(col => col.name === "toca_culto_jovens");
   if (!hasCultoJovens) {
     db.exec("ALTER TABLE IRMAS ADD COLUMN toca_culto_jovens INTEGER NOT NULL DEFAULT 0");
+  }
+
+  const hasIgrejasPreferencias = irmasColumns.some(col => col.name === "igrejas_preferencias");
+  if (!hasIgrejasPreferencias) {
+    db.exec("ALTER TABLE IRMAS ADD COLUMN igrejas_preferencias TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  const hasCultoJovensIgrejas = irmasColumns.some(col => col.name === "culto_jovens_igreja_ids");
+  if (!hasCultoJovensIgrejas) {
+    db.exec("ALTER TABLE IRMAS ADD COLUMN culto_jovens_igreja_ids TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  const hasPrimeiroDomingoIgrejas = irmasColumns.some(col => col.name === "primeiro_domingo_igreja_ids");
+  if (!hasPrimeiroDomingoIgrejas) {
+    db.exec("ALTER TABLE IRMAS ADD COLUMN primeiro_domingo_igreja_ids TEXT NOT NULL DEFAULT '[]'");
   }
 }
 
