@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sistema de Rodízio de Organistas</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Sistema de Rodízio de Organistas</h1>
+      <p class="muted">Localhost • Porta 9000 • Node + SQLite</p>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="igrejas">Igrejas</button>
+    <button class="tab" data-tab="irmas">Irmãs</button>
+    <button class="tab" data-tab="gerar">Gerar Rodízio</button>
+    <button class="tab" data-tab="visualizar">Visualizar Rodízio</button>
+  </nav>
+
+  <main class="container">
+    <!-- IGREJAS -->
+    <section class="panel active" id="tab-igrejas">
+      <div class="grid2">
+        <div class="card">
+          <h2>Cadastro de Igrejas</h2>
+          <div class="form">
+            <label>Nome da igreja</label>
+            <input id="igreja_nome" placeholder="Ex.: Central" />
+
+            <label>Dias fixos de culto</label>
+            <div class="checks" id="igreja_dias"></div>
+
+            <label class="inline">
+              <input type="checkbox" id="igreja_jovens" />
+              Tem culto de jovens?
+            </label>
+
+            <label class="inline">
+              <input type="checkbox" id="igreja_primeiro_domingo" />
+              Participa do culto de jovens no 1º domingo do mês?
+            </label>
+
+            <button class="btn primary" id="btnSalvarIgreja">Salvar</button>
+            <p class="muted small">
+              Regra: no 1º domingo só recebem escala as igrejas marcadas como participantes.
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Igrejas cadastradas</h2>
+          <div id="lista_igrejas" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- IRMÃS -->
+    <section class="panel" id="tab-irmas">
+      <div class="grid2">
+        <div class="card">
+          <h2>Cadastro de Irmãs (Organistas)</h2>
+          <div class="form">
+            <label>Nome completo</label>
+            <input id="irma_nome" placeholder="Ex.: Maria da Silva" />
+
+            <label>Igreja de origem (opcional)</label>
+            <input id="irma_igreja_origem" placeholder="Ex.: Central" />
+
+            <label>Dias que pode tocar</label>
+            <div class="checks" id="irma_dias"></div>
+
+            <label class="inline">
+              <input type="checkbox" id="irma_primeiro_domingo" />
+              Pode tocar no 1º domingo do mês?
+            </label>
+
+            <label>Dias bloqueados (YYYY-MM-DD) — separa por vírgula</label>
+            <input id="irma_bloqueios" placeholder="Ex.: 2026-02-10, 2026-03-05" />
+
+            <button class="btn primary" id="btnSalvarIrma">Salvar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Irmãs cadastradas</h2>
+          <div id="lista_irmas" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GERAR -->
+    <section class="panel" id="tab-gerar">
+      <div class="grid2">
+        <div class="card">
+          <h2>Gerar Rodízio</h2>
+
+          <div class="form">
+            <div class="row2">
+              <div>
+                <label>Data início</label>
+                <input type="date" id="rodizio_inicio" />
+              </div>
+              <div>
+                <label>Data fim</label>
+                <input type="date" id="rodizio_fim" />
+              </div>
+            </div>
+
+            <button class="btn primary" id="btnGerar">GERAR</button>
+            <button class="btn" id="btnSalvarRodizio" disabled>SALVAR</button>
+
+            <div class="notice">
+              <b>Regras:</b>
+              <ul>
+                <li>Proibido dias sequenciais por irmã</li>
+                <li>1º Domingo: só igrejas participantes + só irmãs habilitadas</li>
+                <li>Distribuição justa (quem tocou menos tem prioridade)</li>
+                <li>Respeita dias permitidos e bloqueios</li>
+                <li><b>Alternância por igreja</b> quando possível</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3 class="mt">Prévia gerada</h3>
+          <div id="preview_box" class="preview"></div>
+        </div>
+
+        <div class="card">
+          <h2>Histórico de Rodízios</h2>
+          <div id="lista_rodizios" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISUALIZAR -->
+    <section class="panel" id="tab-visualizar">
+      <div class="card">
+        <div class="rowBetween">
+          <div>
+            <h2>Visualizar Rodízio</h2>
+            <p class="muted">Selecione um rodízio no histórico para exibir aqui.</p>
+          </div>
+
+          <div class="row">
+            <input id="cidade_pdf" placeholder="Nome da cidade (PDF)" />
+            <button class="btn" id="btnSelecionarIgrejasPDF" disabled>Gerar PDF</button>
+          </div>
+        </div>
+
+        <div id="visual_box"></div>
+      </div>
+
+      <!-- Modal PDF -->
+      <div id="modal_pdf" class="modal hidden">
+        <div class="modalContent">
+          <h3>Selecionar igrejas para incluir no PDF</h3>
+          <div id="pdf_igrejas_checks" class="checks"></div>
+          <div class="rowBetween mt">
+            <button class="btn" id="btnPDFCancelar">Cancelar</button>
+            <button class="btn primary" id="btnPDFGerar">Gerar PDF</button>
+          </div>
+          <p class="muted small mt">Se nenhuma igreja for selecionada, serão incluídas todas.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    Sistema de Rodízio de Organistas
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

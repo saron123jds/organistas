@@ -1,0 +1,54 @@
+// database.js
+const path = require("path");
+const Database = require("better-sqlite3");
+
+const dbPath = path.join(__dirname, "rodizio.sqlite");
+const db = new Database(dbPath);
+
+function init() {
+  db.pragma("journal_mode = WAL");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS IGREJAS (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE,
+      dias_culto TEXT NOT NULL, -- JSON string array ["Terça","Domingo"]
+      culto_jovens INTEGER NOT NULL DEFAULT 0,
+      participa_primeiro_domingo INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS IRMAS (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE,
+      igreja_origem TEXT,
+      dias_disponiveis TEXT NOT NULL, -- JSON string array
+      toca_primeiro_domingo INTEGER NOT NULL DEFAULT 0,
+      dias_bloqueados TEXT NOT NULL DEFAULT '[]' -- JSON array de datas "YYYY-MM-DD"
+    );
+
+    CREATE TABLE IF NOT EXISTS RODIZIOS (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      data_inicio TEXT NOT NULL, -- YYYY-MM-DD
+      data_fim TEXT NOT NULL,    -- YYYY-MM-DD
+      criado_em TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ESCALAS (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rodizio_id INTEGER NOT NULL,
+      data TEXT NOT NULL, -- YYYY-MM-DD
+      igreja_id INTEGER NOT NULL,
+      irma_id INTEGER, -- pode ser NULL se não houver disponível
+      FOREIGN KEY (rodizio_id) REFERENCES RODIZIOS(id) ON DELETE CASCADE,
+      FOREIGN KEY (igreja_id) REFERENCES IGREJAS(id),
+      FOREIGN KEY (irma_id) REFERENCES IRMAS(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_escalas_rodizio ON ESCALAS(rodizio_id);
+    CREATE INDEX IF NOT EXISTS idx_escalas_data ON ESCALAS(data);
+    CREATE INDEX IF NOT EXISTS idx_escalas_irma ON ESCALAS(irma_id);
+    CREATE INDEX IF NOT EXISTS idx_escalas_igreja ON ESCALAS(igreja_id);
+  `);
+}
+
+module.exports = { db, init };
