@@ -89,15 +89,28 @@
             <label>Dias que pode tocar</label>
             <div class="checks" id="irma_dias"></div>
 
+            <label>Igrejas e dias por igreja</label>
+            <div id="irma_igrejas_mapa" class="churchMap"></div>
+
             <label class="inline">
               <input type="checkbox" id="irma_culto_jovens" />
               Toca no culto de jovens?
             </label>
 
+            <div id="irma_culto_jovens_igrejas_wrap" class="hidden">
+              <label>Igrejas em que pode tocar no culto de jovens</label>
+              <div class="checks" id="irma_culto_jovens_igrejas"></div>
+            </div>
+
             <label class="inline hidden" id="irma_primeiro_domingo_wrap">
               <input type="checkbox" id="irma_primeiro_domingo" />
               Se sim, pode tocar no 1º domingo do mês?
             </label>
+
+            <div id="irma_primeiro_domingo_igrejas_wrap" class="hidden">
+              <label>Igrejas em que pode tocar no 1º domingo</label>
+              <div class="checks" id="irma_primeiro_domingo_igrejas"></div>
+            </div>
 
             <label>Dias bloqueados (YYYY-MM-DD) — separa por vírgula</label>
             <input id="irma_bloqueios" placeholder="Ex.: 2026-02-10, 2026-03-05" />
