@@ -10,6 +10,15 @@ let rodizioSelecionadoId = null;
 
 function qs(sel){ return document.querySelector(sel); }
 function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
+function esc(str){
+  return String(str ?? "").replace(/[&<>"']/g, m => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[m]));
+}
 
 function toast(msg){
   alert(msg);
@@ -53,16 +62,32 @@ async function loadIgrejas(){
   igrejas = await api("/api/igrejas");
   renderIgrejas();
   renderPDFIgrejasChecks();
+  updateDashboardStats();
 }
 
 async function loadIrmas(){
   irmas = await api("/api/irmas");
   renderIrmas();
+  updateDashboardStats();
 }
 
 async function loadRodizios(){
   rodizios = await api("/api/rodizios");
   renderRodizios();
+  updateDashboardStats();
+}
+
+function updateDashboardStats(){
+  qs("#stat_igrejas").textContent = igrejas.length;
+  qs("#stat_irmas").textContent = irmas.length;
+  qs("#stat_rodizios").textContent = rodizios.length;
+}
+
+function togglePrimeiroDomingoField(){
+  const tocaJovens = qs("#irma_culto_jovens").checked;
+  const wrap = qs("#irma_primeiro_domingo_wrap");
+  wrap.classList.toggle("hidden", !tocaJovens);
+  if (!tocaJovens) qs("#irma_primeiro_domingo").checked = false;
 }
 
 /** Renderers **/
@@ -81,7 +106,7 @@ function renderIgrejas(){
     div.innerHTML = `
       <div class="title">
         <div>
-          <b>${g.nome}</b>
+          <b>${esc(g.nome)}</b>
           <div class="muted small">Dias: ${g.dias_culto.join(", ")} • 1º Domingo: ${g.participa_primeiro_domingo ? "Sim" : "Não"} • Jovens: ${g.culto_jovens ? "Sim" : "Não"}</div>
         </div>
         <div class="row">
@@ -114,9 +139,10 @@ function renderIrmas(){
     div.innerHTML = `
       <div class="title">
         <div>
-          <b>${i.nome}</b>
-          <div class="muted small">Origem: ${i.igreja_origem || "-"} • Dias: ${i.dias_disponiveis.join(", ")} • 1º Domingo: ${i.toca_primeiro_domingo ? "Sim" : "Não"}</div>
-          <div class="muted small">Bloqueios: ${bloqueios || "-"}</div>
+          <b>${esc(i.nome)}</b>
+          <div class="muted small">Origem: ${esc(i.igreja_origem || "-")} • Dias: ${i.dias_disponiveis.join(", ")} • 1º Domingo: ${i.toca_primeiro_domingo ? "Sim" : "Não"}</div>
+          <div class="muted small">Bloqueios: ${esc(bloqueios || "-")}</div>
+          <div class="muted small">Culto de jovens: ${i.toca_culto_jovens ? "Sim" : "Não"}</div>
         </div>
         <div class="row">
           <button class="btn" data-edit="${i.id}">Bloqueios</button>
@@ -347,7 +373,8 @@ async function onSalvarIrma(){
   const nome = qs("#irma_nome").value.trim();
   const igreja_origem = qs("#irma_igreja_origem").value.trim();
   const dias = getCheckedDays("irma");
-  const toca_primeiro_domingo = qs("#irma_primeiro_domingo").checked;
+  const toca_culto_jovens = qs("#irma_culto_jovens").checked;
+  const toca_primeiro_domingo = toca_culto_jovens && qs("#irma_primeiro_domingo").checked;
 
   const bloqueiosTxt = qs("#irma_bloqueios").value.trim();
   const dias_bloqueados = bloqueiosTxt
@@ -360,13 +387,15 @@ async function onSalvarIrma(){
   await api("/api/irmas", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ nome, igreja_origem, dias_disponiveis:dias, toca_primeiro_domingo, dias_bloqueados })
+    body: JSON.stringify({ nome, igreja_origem, dias_disponiveis:dias, toca_culto_jovens, toca_primeiro_domingo, dias_bloqueados })
   });
 
   qs("#irma_nome").value = "";
   qs("#irma_igreja_origem").value = "";
   qsa("#irma_dias input").forEach(i => i.checked = false);
+  qs("#irma_culto_jovens").checked = false;
   qs("#irma_primeiro_domingo").checked = false;
+  togglePrimeiroDomingoField();
   qs("#irma_bloqueios").value = "";
 
   await loadIrmas();
@@ -447,6 +476,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   qs("#btnSalvarIgreja").addEventListener("click", onSalvarIgreja);
   qs("#btnSalvarIrma").addEventListener("click", onSalvarIrma);
+  qs("#irma_culto_jovens").addEventListener("change", togglePrimeiroDomingoField);
+  togglePrimeiroDomingoField();
   qs("#btnGerar").addEventListener("click", onGerar);
   qs("#btnSalvarRodizio").addEventListener("click", onSalvarRodizio);
 

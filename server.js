@@ -64,7 +64,8 @@ function getIrmas() {
   return db.prepare("SELECT * FROM IRMAS ORDER BY nome ASC").all().map(r => ({
     ...r,
     dias_disponiveis: JSON.parse(r.dias_disponiveis),
-    dias_bloqueados: JSON.parse(r.dias_bloqueados)
+    dias_bloqueados: JSON.parse(r.dias_bloqueados),
+    toca_culto_jovens: r.toca_culto_jovens ?? 0
   }));
 }
 function countEscalasByIrmaAllTime() {
@@ -156,6 +157,7 @@ app.post("/api/irmas", (req, res) => {
     nome,
     igreja_origem,
     dias_disponiveis,
+    toca_culto_jovens,
     toca_primeiro_domingo,
     dias_bloqueados
   } = req.body;
@@ -168,13 +170,14 @@ app.post("/api/irmas", (req, res) => {
 
   try {
     const stmt = db.prepare(`
-      INSERT INTO IRMAS (nome, igreja_origem, dias_disponiveis, toca_primeiro_domingo, dias_bloqueados)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO IRMAS (nome, igreja_origem, dias_disponiveis, toca_culto_jovens, toca_primeiro_domingo, dias_bloqueados)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
     const info = stmt.run(
       nome.trim(),
       igreja_origem ? igreja_origem.trim() : null,
       JSON.stringify(dias_disponiveis),
+      toca_culto_jovens ? 1 : 0,
       toca_primeiro_domingo ? 1 : 0,
       JSON.stringify(blocked)
     );
@@ -243,7 +246,8 @@ function generateSchedule(data_inicio, data_fim) {
         // bloqueios manuais
         if (ir.dias_bloqueados.includes(dateISO)) return false;
 
-        // regra 2: primeiro domingo
+        // regra 2: culto de jovens / primeiro domingo
+        if (igreja.culto_jovens === 1 && ir.toca_culto_jovens !== 1) return false;
         if (firstSunday && ir.toca_primeiro_domingo !== 1) return false;
 
         // regra 1: proibido dias sequenciais (um dia antes)

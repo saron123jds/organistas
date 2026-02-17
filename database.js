@@ -22,6 +22,7 @@ function init() {
       nome TEXT NOT NULL UNIQUE,
       igreja_origem TEXT,
       dias_disponiveis TEXT NOT NULL, -- JSON string array
+      toca_culto_jovens INTEGER NOT NULL DEFAULT 0,
       toca_primeiro_domingo INTEGER NOT NULL DEFAULT 0,
       dias_bloqueados TEXT NOT NULL DEFAULT '[]' -- JSON array de datas "YYYY-MM-DD"
     );
@@ -49,6 +50,12 @@ function init() {
     CREATE INDEX IF NOT EXISTS idx_escalas_irma ON ESCALAS(irma_id);
     CREATE INDEX IF NOT EXISTS idx_escalas_igreja ON ESCALAS(igreja_id);
   `);
+
+  const irmasColumns = db.prepare("PRAGMA table_info(IRMAS)").all();
+  const hasCultoJovens = irmasColumns.some(col => col.name === "toca_culto_jovens");
+  if (!hasCultoJovens) {
+    db.exec("ALTER TABLE IRMAS ADD COLUMN toca_culto_jovens INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 module.exports = { db, init };
