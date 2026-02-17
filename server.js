@@ -61,10 +61,32 @@ function getIgrejas() {
   }));
 }
 function getIrmas() {
-  return db.prepare("SELECT * FROM IRMAS ORDER BY nome ASC").all().map(r => ({
+  const irmasBase = db.prepare("SELECT * FROM IRMAS ORDER BY nome ASC").all().map(r => ({
     ...r,
     dias_disponiveis: JSON.parse(r.dias_disponiveis),
-    dias_bloqueados: JSON.parse(r.dias_bloqueados)
+    dias_bloqueados: JSON.parse(r.dias_bloqueados),
+    toca_culto_jovens: r.toca_culto_jovens ?? 0
+  }));
+
+  const configs = db.prepare(`
+    SELECT irma_id, igreja_id, dias_semana, toca_culto_jovens, toca_primeiro_domingo
+    FROM IRMA_IGREJA_CONFIG
+  `).all();
+
+  const cfgByIrma = new Map();
+  for (const c of configs) {
+    if (!cfgByIrma.has(c.irma_id)) cfgByIrma.set(c.irma_id, []);
+    cfgByIrma.get(c.irma_id).push({
+      igreja_id: c.igreja_id,
+      dias_semana: JSON.parse(c.dias_semana),
+      toca_culto_jovens: c.toca_culto_jovens,
+      toca_primeiro_domingo: c.toca_primeiro_domingo
+    });
+  }
+
+  return irmasBase.map(i => ({
+    ...i,
+    igreja_config: cfgByIrma.get(i.id) || []
   }));
 }
 function countEscalasByIrmaAllTime() {
@@ -142,7 +164,11 @@ app.post("/api/igrejas", (req, res) => {
 
 app.delete("/api/igrejas/:id", (req, res) => {
   const id = Number(req.params.id);
-  db.prepare("DELETE FROM IGREJAS WHERE id = ?").run(id);
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM IRMA_IGREJA_CONFIG WHERE igreja_id = ?").run(id);
+    db.prepare("DELETE FROM IGREJAS WHERE id = ?").run(id);
+  });
+  tx();
   res.json({ ok: true });
 });
 
@@ -156,29 +182,66 @@ app.post("/api/irmas", (req, res) => {
     nome,
     igreja_origem,
     dias_disponiveis,
+    toca_culto_jovens,
     toca_primeiro_domingo,
-    dias_bloqueados
+    dias_bloqueados,
+    igreja_config
   } = req.body;
 
-  if (!nome || !Array.isArray(dias_disponiveis) || dias_disponiveis.length === 0) {
-    return res.status(400).json({ error: "Nome e dias disponíveis são obrigatórios." });
+  if (!nome || !Array.isArray(igreja_config) || igreja_config.length === 0) {
+    return res.status(400).json({ error: "Nome e configuração por igreja são obrigatórios." });
+  }
+
+  const invalidCfg = igreja_config.some(cfg => (
+    !cfg || typeof cfg.igreja_id !== "number" || !Array.isArray(cfg.dias_semana) || cfg.dias_semana.length === 0
+  ));
+  if (invalidCfg) {
+    return res.status(400).json({ error: "Cada igreja selecionada precisa de pelo menos 1 dia da semana." });
   }
 
   const blocked = Array.isArray(dias_bloqueados) ? dias_bloqueados : [];
+  const diasGlobais = Array.isArray(dias_disponiveis) && dias_disponiveis.length > 0
+    ? dias_disponiveis
+    : Array.from(new Set(igreja_config.flatMap(cfg => cfg.dias_semana)));
 
-  try {
+  const tx = db.transaction(() => {
     const stmt = db.prepare(`
-      INSERT INTO IRMAS (nome, igreja_origem, dias_disponiveis, toca_primeiro_domingo, dias_bloqueados)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO IRMAS (nome, igreja_origem, dias_disponiveis, toca_culto_jovens, toca_primeiro_domingo, dias_bloqueados)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
     const info = stmt.run(
       nome.trim(),
       igreja_origem ? igreja_origem.trim() : null,
-      JSON.stringify(dias_disponiveis),
+      JSON.stringify(diasGlobais),
+      toca_culto_jovens ? 1 : 0,
       toca_primeiro_domingo ? 1 : 0,
       JSON.stringify(blocked)
     );
-    res.json({ ok: true, id: info.lastInsertRowid });
+
+    const irmaId = Number(info.lastInsertRowid);
+    const insCfg = db.prepare(`
+      INSERT INTO IRMA_IGREJA_CONFIG
+      (irma_id, igreja_id, dias_semana, toca_culto_jovens, toca_primeiro_domingo)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const cfg of igreja_config) {
+      const diasSemRepeticao = Array.from(new Set(cfg.dias_semana));
+      insCfg.run(
+        irmaId,
+        cfg.igreja_id,
+        JSON.stringify(diasSemRepeticao),
+        cfg.toca_culto_jovens ? 1 : 0,
+        cfg.toca_primeiro_domingo ? 1 : 0
+      );
+    }
+
+    return irmaId;
+  });
+
+  try {
+    const irmaId = tx();
+    res.json({ ok: true, id: irmaId });
   } catch (e) {
     res.status(400).json({ error: "Não foi possível salvar irmã (nome duplicado?)." });
   }
@@ -194,7 +257,11 @@ app.put("/api/irmas/:id/bloqueios", (req, res) => {
 
 app.delete("/api/irmas/:id", (req, res) => {
   const id = Number(req.params.id);
-  db.prepare("DELETE FROM IRMAS WHERE id = ?").run(id);
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM IRMA_IGREJA_CONFIG WHERE irma_id = ?").run(id);
+    db.prepare("DELETE FROM IRMAS WHERE id = ?").run(id);
+  });
+  tx();
   res.json({ ok: true });
 });
 
@@ -237,14 +304,18 @@ function generateSchedule(data_inicio, data_fim) {
     // Para cada igreja, escolhe 1 irmã
     for (const igreja of cultos) {
       const candidatos = irmas.filter(ir => {
-        // regra 4: respeitar dias permitidos
-        if (!ir.dias_disponiveis.includes(dayName)) return false;
+        const cfg = (ir.igreja_config || []).find(c => c.igreja_id === igreja.id);
+        if (!cfg) return false;
+
+        // regra 4: respeitar dias permitidos por igreja
+        if (!cfg.dias_semana.includes(dayName)) return false;
 
         // bloqueios manuais
         if (ir.dias_bloqueados.includes(dateISO)) return false;
 
-        // regra 2: primeiro domingo
-        if (firstSunday && ir.toca_primeiro_domingo !== 1) return false;
+        // regra 2: culto de jovens / primeiro domingo por igreja
+        if (igreja.culto_jovens === 1 && cfg.toca_culto_jovens !== 1) return false;
+        if (firstSunday && cfg.toca_primeiro_domingo !== 1) return false;
 
         // regra 1: proibido dias sequenciais (um dia antes)
         const last = lastPlayedDate.get(ir.id);
@@ -273,7 +344,8 @@ function generateSchedule(data_inicio, data_fim) {
           // alternância: evita repetir o mesmo dia da semana no par (irma|igreja) quando possível alternar
           const key = `${ir.id}|${igreja.id}`;
           const lastW = lastWeekdayPair.get(key);
-          const intersection = churchDays.filter(cd => ir.dias_disponiveis.includes(cd));
+          const cfg = (ir.igreja_config || []).find(c => c.igreja_id === igreja.id);
+          const intersection = churchDays.filter(cd => (cfg?.dias_semana || []).includes(cd));
           const canAlternate = intersection.length > 1;
           const alternationPenalty = (canAlternate && lastW === dayName) ? 5 : 0;
 

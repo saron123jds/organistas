@@ -21,9 +21,22 @@ function init() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nome TEXT NOT NULL UNIQUE,
       igreja_origem TEXT,
-      dias_disponiveis TEXT NOT NULL, -- JSON string array
+      dias_disponiveis TEXT NOT NULL, -- JSON string array (legado)
+      toca_culto_jovens INTEGER NOT NULL DEFAULT 0,
       toca_primeiro_domingo INTEGER NOT NULL DEFAULT 0,
       dias_bloqueados TEXT NOT NULL DEFAULT '[]' -- JSON array de datas "YYYY-MM-DD"
+    );
+
+    CREATE TABLE IF NOT EXISTS IRMA_IGREJA_CONFIG (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      irma_id INTEGER NOT NULL,
+      igreja_id INTEGER NOT NULL,
+      dias_semana TEXT NOT NULL, -- JSON string array de dias para essa igreja
+      toca_culto_jovens INTEGER NOT NULL DEFAULT 0,
+      toca_primeiro_domingo INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (irma_id, igreja_id),
+      FOREIGN KEY (irma_id) REFERENCES IRMAS(id) ON DELETE CASCADE,
+      FOREIGN KEY (igreja_id) REFERENCES IGREJAS(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS RODIZIOS (
@@ -48,7 +61,45 @@ function init() {
     CREATE INDEX IF NOT EXISTS idx_escalas_data ON ESCALAS(data);
     CREATE INDEX IF NOT EXISTS idx_escalas_irma ON ESCALAS(irma_id);
     CREATE INDEX IF NOT EXISTS idx_escalas_igreja ON ESCALAS(igreja_id);
+    CREATE INDEX IF NOT EXISTS idx_cfg_irma ON IRMA_IGREJA_CONFIG(irma_id);
+    CREATE INDEX IF NOT EXISTS idx_cfg_igreja ON IRMA_IGREJA_CONFIG(igreja_id);
   `);
+
+  const irmasColumns = db.prepare("PRAGMA table_info(IRMAS)").all();
+  const hasCultoJovens = irmasColumns.some(col => col.name === "toca_culto_jovens");
+  if (!hasCultoJovens) {
+    db.exec("ALTER TABLE IRMAS ADD COLUMN toca_culto_jovens INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Migração de dados legados: replica disponibilidade global da irmã para cada igreja existente
+  // quando ela ainda não possui configurações por igreja.
+  const irmas = db.prepare("SELECT * FROM IRMAS").all();
+  const igrejas = db.prepare("SELECT id FROM IGREJAS").all();
+  const countCfgStmt = db.prepare("SELECT COUNT(*) as qtd FROM IRMA_IGREJA_CONFIG WHERE irma_id = ?");
+  const insCfgStmt = db.prepare(`
+    INSERT OR IGNORE INTO IRMA_IGREJA_CONFIG
+      (irma_id, igreja_id, dias_semana, toca_culto_jovens, toca_primeiro_domingo)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const tx = db.transaction(() => {
+    for (const irma of irmas) {
+      const qtd = countCfgStmt.get(irma.id)?.qtd || 0;
+      if (qtd > 0) continue;
+
+      const dias = irma.dias_disponiveis || "[]";
+      for (const igreja of igrejas) {
+        insCfgStmt.run(
+          irma.id,
+          igreja.id,
+          dias,
+          irma.toca_culto_jovens ? 1 : 0,
+          irma.toca_primeiro_domingo ? 1 : 0
+        );
+      }
+    }
+  });
+  tx();
 }
 
 module.exports = { db, init };
